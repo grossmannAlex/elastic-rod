@@ -39,7 +39,7 @@
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/diagonal_matrix.h>
 
-#define PI 3.14159265
+#define PI 3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923460348610454326648213393607260249141273
 
 using namespace dealii;
 
@@ -61,7 +61,7 @@ using namespace dealii;
 Tensor<1,3> f_n_hat ( const double &s )
 {
 	 const Tensor<1,3> result(
-		 { 100, 0, 0 });
+		 { 0, 1, 0 });
 	return result;
 }
 
@@ -81,6 +81,10 @@ Tensor<1,3> f_m_hat ( const double &s )
 Tensor<2,3> skw_mat( const Tensor<1,3> &inp )
 {
 	Tensor <2,3> skw;
+	skw[0][0] = 0.0;
+	skw[1][1] = 0.0;
+	skw[2][2] = 0.0;
+	
 	skw[0][1] = -inp[2];
 	skw[0][2] = inp[1];
 	skw[1][0] = inp[2];
@@ -105,7 +109,7 @@ Tensor<1,3> axial_vec( const Tensor<2,3> &inp )
 	// test
 	Tensor <2,3> test;
 	test = inp + transpose(inp);
-	if ( test.norm_square() > 0 )
+	if ( test.norm() > 0 )
 		std::cout << "--- skew-symmetric matrix is not skew symmetric! ---" <<std::endl;
 	
 	return vec;
@@ -127,18 +131,18 @@ void rodriguez_formula ( const Tensor<1,3> &inp_vector , Tensor<2,3> &out_matrix
 	out_matrix[1][1] = 1;
 	out_matrix[2][2] = 1;
 	 
-	if ( inp_vector.norm_square() == 0 ) 
+	if ( inp_vector.norm() == 0 ) 
 		{ return; }
 	 
 	 
 	Tensor<2,3> skw_matrix;
 	skw_matrix = skw_mat( inp_vector );
 	
-	const double angle = inp_vector.norm_square();
+	const long double angle = inp_vector.norm();
 	
 	out_matrix += ( 
 		( sin( angle ) * skw_matrix )
-		/ inp_vector.norm_square()
+		/ angle
 	);
 	
 	out_matrix += ( 
@@ -158,10 +162,7 @@ public:
 	InnerEnergyFunction ();
 	~InnerEnergyFunction ();
 
-	
-	/* set initial values ... */
-	void set_solution ();
-	/* set solution of newton iteration */
+	/* set solution of newton iteration oder inital configuration */
 	void set_solution ( 
 		const Tensor <1,3> &r_centerline ,
 		const Tensor <1,3> &drds_centerline ,
@@ -179,6 +180,9 @@ public:
 	/* choose a material law */
 	void set_constitutive_law ( const std::string &name_of_law );
 	
+	
+	/* print private members */
+	void print_member();
 	
 	/* R Matrix */
 	Tensor <2,3> get_R() { return R; };
@@ -218,14 +222,37 @@ public:
 		
 		Tensor <1,3> v; 	// shear strain
 		Tensor <1,3> k; 	// curvature
+		
+		/* 
+		 * This is somehow special!
+		 * Imagine a rod like r(s,t=0) = [0,0,s]
+		 * therefore r'(s,t=0) is (0,0,1)
+		 * Assume in that cas the stored energy is zero,
+		 * so one would expect the strains also to be zero
+		 * by definition v = R^T r' = [0,0,1] (here)
+		 * but looking to the forces due to shear strains 
+		 * n = R * (dpsi / dv) should be [0, 0, 0]
+		 * the material law need therefore something like
+		 * r' - r'(0) to hold former expectation
+		 */
+		
+		const Tensor <1,3> r_prime_zero;
+		const Tensor <2,3> R_zero;
+		const Tensor <2,3> R_prime_zero;
+		Tensor <1,3> v_zero;
+		Tensor <1,3> k_zero;
 };
 
   
 
 
-InnerEnergyFunction::InnerEnergyFunction () 
+InnerEnergyFunction::InnerEnergyFunction() :
+	r_prime_zero( {0,0,1} ), 
+	R_zero( { {1,0,0}, {0,1,0}, {0,0,1} } ),
+	R_prime_zero( { {0,0,0}, {0,0,0}, {0,0,0} } )
 {
-	// some content 
+	v_zero = transpose(R_zero) * r_prime_zero; 
+	k_zero = axial_vec ( transpose(R_zero) * R_prime_zero );
 }
 
 
@@ -253,22 +280,22 @@ void InnerEnergyFunction::set_coefficients(double GAx, double GAy, double EA, do
 	
 	C12[0][0] = 0;
 	C12[0][1] = 0;
-	C12[0][2] = -GIx;
+	C12[0][2] = 0;
 	C12[1][0] = 0;
 	C12[1][1] = 0;
-	C12[1][2] = GIy;
-	C12[2][0] = EIx;
-	C12[2][1] = -EIy;
+	C12[1][2] = 0;
+	C12[2][0] = 0;
+	C12[2][1] = 0;
 	C12[2][2] = 0;
 	
 	C21[0][0] = 0;
 	C21[0][1] = 0;
-	C21[0][2] = EIx;
+	C21[0][2] = 0;
 	C21[1][0] = 0;
 	C21[1][1] = 0;
-	C21[1][2] = -EIy;
-	C21[2][0] = -GIx;
-	C21[2][1] = GIy;
+	C21[1][2] = 0;
+	C21[2][0] = 0;
+	C21[2][1] = 0;
 	C21[2][2] = 0;
 	
 	C22[0][0] = EIx;
@@ -360,8 +387,8 @@ Tensor< 2, 3 > InnerEnergyFunction::get_R_Cmn_RT( const int sec_m, const int sec
 Tensor< 1, 3 > InnerEnergyFunction::get_n()
 {
 	Tensor< 1, 3 > result;
-	result = get_Cmn(1,1) * v;
-	result += get_Cmn(1,2) * k;
+	result = get_Cmn(1,1) * (v - v_zero);
+	result += get_Cmn(1,2) * (k - k_zero);
 	
 	return ( R * result );
 }
@@ -371,9 +398,70 @@ Tensor< 1, 3 > InnerEnergyFunction::get_n()
 Tensor< 1, 3 > InnerEnergyFunction::get_m()
 {
 	Tensor< 1, 3 > result;
-	result = get_Cmn(2,1) * v;
-	result += get_Cmn(2,2) * k;
+	result = get_Cmn(2,1) * (v - v_zero);
+	result += get_Cmn(2,2) * (k - k_zero);
 	
 	return ( R * result );
 }
 
+
+
+void InnerEnergyFunction::print_member()
+{
+		std::cout 	<< "r: " 		
+					<< r << std::endl
+					<< "r': "
+					<< r_prime << std::endl
+					<< "theta: " 
+					<< theta << std::endl
+					<< "theta': "
+					<< theta_prime << std::endl
+					<< "R: "
+					<< R << std::endl
+					<< "v: "
+					<< v << std::endl
+					<< "k: "
+					<< k << std::endl<< std::endl;
+}
+
+
+
+
+/*
+ * some tests
+ */
+void test_InnerEnergy_function()
+{
+	std::cout << "running some unit-tests ... " << std::endl;
+	
+	InnerEnergyFunction my_func;
+	Tensor <1,3> 
+		r ({0,0,1}),
+		r_prime ({0,0,1}), 
+		theta ({0,0,PI/4}), 
+		theta_prime ({0,0,0});
+	
+	my_func.set_solution( r, r_prime, theta, theta_prime );
+	
+	my_func.set_coefficients(
+		1.0, 1.0, 1.0, 1.0, 1.0, 1.0
+	);
+	
+	std::cout 	<< my_func.get_Cmn(1,1) << std::endl
+				<< my_func.get_Cmn(1,2) << std::endl
+				<< my_func.get_Cmn(2,1) << std::endl
+				<< my_func.get_Cmn(2,2) << std::endl<<std::endl;
+	
+	std::cout 	<< my_func.get_R_Cmn_RT(1,1) << std::endl
+				<< my_func.get_R_Cmn_RT(1,2) << std::endl
+				<< my_func.get_R_Cmn_RT(2,1) << std::endl
+				<< my_func.get_R_Cmn_RT(2,2) << std::endl<<std::endl;
+				
+	std::cout 	<< "n: " << my_func.get_n() << std::endl
+				<< "m: " << my_func.get_m() << std::endl<< std::endl;
+				
+	my_func.print_member();
+	
+	
+	std::cout << "... passing all of them." << std::endl << std::endl;
+}
