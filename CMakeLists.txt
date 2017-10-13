@@ -1,9 +1,9 @@
 ##
-#  CMake script for the step-8 tutorial program:
+#  CMake script for the elastic rods:
 ##
 
 # Set the name of the project and target:
-SET(TARGET "step-xx-1DrR")
+SET(TARGET "run-elastic-rod")
 
 # Declare all source files the target consists of. Here, this is only
 # the one step-X.cc file, but as you expand your project you may wish
@@ -16,7 +16,7 @@ SET(TARGET "step-xx-1DrR")
 # in the "CMake in user projects" page accessible from the "User info"
 # page of the documentation.
 SET(TARGET_SRC
-  ${TARGET}.cc
+  main-elastic-rod.cc
   )
 
 # Usually, you will not need to modify anything beyond this point...
