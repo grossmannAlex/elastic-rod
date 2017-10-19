@@ -26,11 +26,19 @@ public:
     distributed_loads(const distributed_loads& orig);
     virtual ~distributed_loads();
     
-    Tensor<1, 3> f_n_hat( const double &s );
-    Tensor<1, 3> f_m_hat( const double &s );
+    // distributed loads
+    Tensor<1, 3> f_n_hat( const double &s, const Tensor < 2, 3 > R );
+    Tensor<1, 3> f_m_hat( const double &s, const Tensor < 2, 3 > R );
+    
+    // neumann
+    Tensor<1, 3> f_n_pre( const Tensor < 2, 3 > R);
+    Tensor<1, 3> f_m_pre( const Tensor < 2, 3 > R);
+    
+    bool ask_for_boundary(
+        const unsigned int i,
+        const unsigned int j);
 private:
 
 };
 
 #endif	/* DISTRIBUTED_LOADS_H */
-

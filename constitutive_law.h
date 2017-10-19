@@ -15,9 +15,9 @@
 #include <deal.II/lac/full_matrix.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/diagonal_matrix.h>
+#include <math.h>       /* pow */
 
 using namespace dealii;
-
 
 /*
  * building a skew symmetric matrix of a vector
@@ -50,8 +50,11 @@ Tensor < 1, 3 > axial_vec(const Tensor < 2, 3 > &inp) {
     // test
     Tensor < 2, 3 > test;
     test = inp + transpose(inp);
-    if (test.norm() > 0)
-        std::cout << "--- skew-symmetric matrix is not skew symmetric! ---" << std::endl;
+    if (test.norm() > 1.0e-12)
+        std::cout
+                << "--- skew-symmetric matrix is not skew symmetric! --- "
+                << test.norm() << " ---"
+                << std::endl;
 
     return vec;
 }
@@ -90,34 +93,45 @@ void rodriguez_formula(const Tensor < 1, 3 > &inp_vector, Tensor < 2, 3 > &out_m
             );
 }
 
-
 class constitutive_law {
 public:
     constitutive_law();
     ~constitutive_law();
 
+    /* material parameter */
+    void set_coefficients();
+
+    void set_old_solution( const Vector<double> &input );
+
     /* set solution of newton iteration oder inital configuration */
     void set_solution(
-            const Tensor < 1, 3 > &r_centerline,
-            const Tensor < 1, 3 > &drds_centerline,
-            const Tensor < 1, 3 > &theta_angles,
-            const Tensor < 1, 3 > &dthetads_angles
+            FEValues < 1, 1 > &fe_values,
+            const unsigned int n_q_points
             );
-
-
-    /* material parameter */
-    void set_coefficients(
-            double GAx, double GAy, double EA, double EIx, double EIy, double GJ
-            );
-
-
     
+    void set_solution(
+            FEFaceValues < 1, 1 > &fe_values,
+            const unsigned int n_q_points
+            );
+
+    void get_solution(
+            const unsigned int q_point,
+            const double s_qpoint
+            );
+
+    double psi();
+
+
     /* print private members */
     void print_member();
 
     /* R Matrix */
     Tensor < 2, 3 > get_R() {
         return R;
+    };
+    
+    Tensor < 1, 3 > get_drds() {
+        return r_prime;
     };
 
 
@@ -132,7 +146,7 @@ public:
 
 
 private:
-    
+
     /* r,r', theta, theta' */
     Tensor < 1, 3 > r;
     Tensor < 1, 3 > r_prime;
@@ -154,6 +168,23 @@ private:
 
     Tensor < 1, 3 > v; // shear strain
     Tensor < 1, 3 > k; // curvature
+
+
+    Vector<double> solution_old;
+    
+    std::vector<double> old_solution_r1;
+    std::vector<double> old_solution_r2;
+    std::vector<double> old_solution_r3;
+    std::vector<double> old_solution_theta1;
+    std::vector<double> old_solution_theta2;
+    std::vector<double> old_solution_theta3;
+
+    std::vector<Tensor < 1, 1 > > old_solution_dr1ds;
+    std::vector<Tensor < 1, 1 > > old_solution_dr2ds;
+    std::vector<Tensor < 1, 1 > > old_solution_dr3ds;
+    std::vector<Tensor < 1, 1 > > old_solution_dtheta1ds;
+    std::vector<Tensor < 1, 1 > > old_solution_dtheta2ds;
+    std::vector<Tensor < 1, 1 > > old_solution_dtheta3ds;
 
     /* 
      * This is somehow special!

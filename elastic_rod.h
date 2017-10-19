@@ -8,10 +8,6 @@
 #ifndef ELASTIC_ROD_H
 #define	ELASTIC_ROD_H
 
-
-#include <deal.II/base/quadrature_lib.h>
-#include <deal.II/base/function.h>
-#include <deal.II/base/tensor.h>
 #include <deal.II/lac/vector.h>
 #include <deal.II/lac/full_matrix.h>
 #include <deal.II/lac/sparse_matrix.h>
@@ -19,6 +15,11 @@
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/precondition.h>
 // #include <deal.II/lac/constraint_matrix.h>
+
+#include <deal.II/base/quadrature_lib.h>
+#include <deal.II/base/function.h>
+#include <deal.II/base/tensor.h>
+
 #include <deal.II/grid/tria.h>
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_refinement.h>
@@ -28,12 +29,13 @@
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_accessor.h>
 #include <deal.II/dofs/dof_tools.h>
-#include <deal.II/fe/fe_values.h>
+
 #include <deal.II/numerics/vector_tools.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/error_estimator.h>
 #include <deal.II/grid/manifold_lib.h>
+#include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/base/parameter_handler.h>
@@ -43,15 +45,16 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdlib.h>     /* abs */
 #include <math.h>
+
 
 #include "distributed_loads.cc"
 #include "constitutive_law.cc"
 
-
+    
 using namespace dealii;
-
 
 template <int dim, int spacedim>
 class elastic_rod {
@@ -66,12 +69,27 @@ private:
             const double &radius,
             const int &n_of_ref);
     void setup_system(const bool first_step);
-    void assemble_system();
+    void assemble_system(  );
     void solve();
     void refine_grid();
     void output_results(const unsigned int cycle) const;
 
 
+    void side_calculation(
+            const Tensor < 1, 3 > &psi_jR_value,
+            const Tensor < 1, 3 > &psi_jR_grad,
+            const Tensor < 1, 3 > &phi_jr_grad,
+            Tensor < 1, 3 > &result_1,
+            Tensor < 1, 3 > &result_2,
+            Tensor < 1, 3 > &result_3
+            );
+
+
+    /* newton iterations methods */
+    double get_newton_step_length();
+    double compute_residual (double alpha);
+    
+    
     constitutive_law material_law;
     distributed_loads loads;
 
@@ -87,7 +105,9 @@ private:
     Vector<double> solution_old;
     Vector<double> system_rhs;
     
-    bool prescribed_boundary_neumann[2][6];
+    std::vector<double> residual;
+    std::vector<double> alphas;
+
 };
 
 
