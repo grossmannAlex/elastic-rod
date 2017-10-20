@@ -294,6 +294,7 @@ void elastic_rod<dim, spacedim>::assemble_system() {
                                     + face_psi_iR_value * material_law.get_m()
                                     ) * fe_face_values.JxW(q_point));
 
+                            
                             /* 
                              * adding unknowns to linear system 
                              */
@@ -366,10 +367,12 @@ void elastic_rod<dim, spacedim>::assemble_system() {
     FEValuesExtractors::Scalar used_mask[] = {r1, r2, r3, theta1, theta2, theta3};
     for (int i = 0; i < 6; i++) {
         // most left boundary
+        
         if (loads.ask_for_boundary(0, i) == false)
             VectorTools::interpolate_boundary_values(
                 dof_handler, 0,
-                ZeroFunction<spacedim > (6),
+//                ZeroFunction<spacedim > (6),
+                ConstantFunction<spacedim > ( loads.get_dirichlet_left(i) , 6),
                 boundary_values,
                 fe.component_mask(used_mask[i])
                 );
@@ -378,7 +381,8 @@ void elastic_rod<dim, spacedim>::assemble_system() {
         if (loads.ask_for_boundary(1, i) == false)
             VectorTools::interpolate_boundary_values(
                 dof_handler, 1,
-                ZeroFunction<spacedim > (6),
+//                ZeroFunction<spacedim > (6),
+                ConstantFunction<spacedim > (loads.get_dirichlet_right(i) , 6),
                 boundary_values,
                 fe.component_mask(used_mask[i])
                 );
@@ -392,7 +396,6 @@ template <int dim, int spacedim>
 void elastic_rod<dim, spacedim>::solve() {
     SolverControl solver_control(10000, 1e-12);
     SolverCG<> cg(solver_control);
-
 
 
     std::cout << "    writing matrix to file ... ";
@@ -443,7 +446,6 @@ void elastic_rod<dim, spacedim>::solve() {
     // evaluation
     residual.push_back(system_rhs.l2_norm());
 
-    std::cout << std::endl;
     // update solution
     solution_old.add(
             get_newton_step_length(),
@@ -555,9 +557,9 @@ double elastic_rod<dim, spacedim>::get_newton_step_length() {
         res_check = compute_residual(alpha);
 
         /* check residual */
-        if ( res_check * 1.15 < res_zero ) {
+        if ( res_check < res_zero ) {
             /* good enough */
-            std::cout << "    use alpha: " << alpha << std::endl;
+            std::cout << "\n  -> alpha: " << alpha << " ";
             alphas.push_back( alpha );
             return alpha;
         }
@@ -566,7 +568,7 @@ double elastic_rod<dim, spacedim>::get_newton_step_length() {
         alpha *= 2.0 / 3.0;
     }
 
-    std::cout << "    use alpha (min): " << alpha << std::endl;
+    std::cout << "\n  -> alpha (min): " << alpha << " ";
     alphas.push_back( alpha );
     return alpha;
 }
@@ -863,13 +865,14 @@ void elastic_rod<dim, spacedim>::run() {
 //            std::cout << " ---  enough ---" << '\n' << '\n';
 //            break;
 //        }
-        if ( residual.back() < 1.0e-10 && !first_call ) {
-            std::cout << " ---  enough ---" << '\n' << '\n';
+        double my_error = 1.0e-10;
+        if ( residual.back() <  && !first_call ) {
+            std::cout << "\n\n >>> good enough err:  " << residual.back() <<  " <<< \n\n";
             break;
         }
         
         if (!first_call && residual.back() > old_residual) {
-            std::cout << " --- !!! residual grows !!! --- " << '\n' << '\n';
+            std::cerr << " --- !!! residual grows !!! --- " << '\n' << '\n';
         }
 
         /* update old_residual */

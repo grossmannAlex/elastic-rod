@@ -22,7 +22,7 @@ Tensor < 1, 3 > distributed_loads::f_n_hat(
     assert(s > 0);
     using namespace dealii;
     Tensor < 1, 3 > result;
-    result[0] = 0;
+    result[0] = 100.0;
     result[1] = 0;
     result[2] = 0;
 
@@ -56,10 +56,10 @@ Tensor < 1, 3 > distributed_loads::f_n_pre(
     Tensor < 1, 3 > n_pre;
     n_pre[0] = 0;
     n_pre[1] = 0;
-    n_pre[2] = 0;
+    n_pre[2] = 0.0;
 
     Tensor < 1, 3 > Rn_pre;
-    Rn_pre[0] = 100;
+    Rn_pre[0] = 0;
     Rn_pre[1] = 0;
     Rn_pre[2] = 0;
     Rn_pre = R * Rn_pre;
@@ -106,13 +106,54 @@ bool distributed_loads::ask_for_boundary(
 //    prescribed_boundary_neumann[1][4] = false;
 //    prescribed_boundary_neumann[1][5] = false;
 
-    prescribed_boundary_neumann[1][0] = true;
-    prescribed_boundary_neumann[1][1] = true;
-    prescribed_boundary_neumann[1][2] = true;
-    prescribed_boundary_neumann[1][3] = true;
-    prescribed_boundary_neumann[1][4] = true;
-    prescribed_boundary_neumann[1][5] = true;
+    prescribed_boundary_neumann[1][0] = false;
+    prescribed_boundary_neumann[1][1] = false;
+    prescribed_boundary_neumann[1][2] = false;
+    prescribed_boundary_neumann[1][3] = false;
+    prescribed_boundary_neumann[1][4] = false;
+    prescribed_boundary_neumann[1][5] = false;
     
     return prescribed_boundary_neumann[i][j];
 }
     
+double distributed_loads::get_dirichlet_left( int entry_num )
+{
+    double most_left_dirichlet[6];
+    
+    // most left boundary condition
+    
+//    std::string msg = "distributed_loads::get_dirichlet_left - error \n\tneumann and dirichlet boundary is requested for the same point";
+//    std::ostream my_stream( msg.c_str() );
+    
+    std::string my_string = "neumann and dirichlet prescribed for the same boundary";
+    Assert( ask_for_boundary(0, entry_num) == false , ExcMessage( my_string ) ); 
+            
+     
+    most_left_dirichlet[0] = 0;
+    most_left_dirichlet[1] = 0;
+    most_left_dirichlet[2] = 0;
+    most_left_dirichlet[3] = 0;
+    most_left_dirichlet[4] = 0;
+    most_left_dirichlet[5] = 0;
+    
+    return most_left_dirichlet[entry_num];
+}
+
+double distributed_loads::get_dirichlet_right( int entry_num )
+{
+    double most_right_dirichlet[6];
+    
+    // most left boundary condition
+    std::string my_string = "neumann and dirichlet prescribed for the same boundary";
+    Assert( ask_for_boundary(1, entry_num) == false , ExcMessage( my_string ) ); 
+    
+    most_right_dirichlet[0] = 0;
+    most_right_dirichlet[1] = 0;
+    most_right_dirichlet[2] = 0;
+    most_right_dirichlet[3] = 0;
+    most_right_dirichlet[4] = 0;
+    most_right_dirichlet[5] = 0;
+    
+    return most_right_dirichlet[entry_num];
+}
+

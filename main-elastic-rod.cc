@@ -24,7 +24,6 @@ int main() {
     
     try {
 
-
 //        StepRod::
         elastic_rod < 1, 1 > elastic_problem_3d;
         elastic_problem_3d.run();

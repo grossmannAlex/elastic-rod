@@ -16,6 +16,8 @@
 #include <deal.II/lac/full_matrix.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/diagonal_matrix.h>
+#include <deal.II/base/exceptions.h>
+
 
 using namespace dealii;
 
@@ -33,6 +35,9 @@ public:
     // neumann
     Tensor<1, 3> f_n_pre( const Tensor < 2, 3 > R);
     Tensor<1, 3> f_m_pre( const Tensor < 2, 3 > R);
+    
+    double get_dirichlet_left( int entry_num );
+    double get_dirichlet_right( int entry_num );
     
     bool ask_for_boundary(
         const unsigned int i,
