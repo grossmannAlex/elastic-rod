@@ -14,7 +14,7 @@ template <int dim, int spacedim>
 elastic_rod<dim, spacedim>::elastic_rod()
 :
 dof_handler(triangulation),
-fe(FE_Q<dim, spacedim>(1), 3,
+fe(FE_Q<dim, spacedim>(2), 3,
 FE_Q<dim, spacedim>(1), 3
 ) {
 }
@@ -82,7 +82,10 @@ void elastic_rod<dim, spacedim>::setup_system(const bool first_step) {
 template <int dim, int spacedim>
 void elastic_rod<dim, spacedim>::assemble_system() {
 
-
+    
+    const int quadrature = 2;
+    const int face_quadrature = 1;
+    
     // 	const FEValuesExtractors::Vector centerline (0);
     // 	const FEValuesExtractors::Vector rotations (spacedim);
     const FEValuesExtractors::Scalar r1(0);
@@ -93,14 +96,14 @@ void elastic_rod<dim, spacedim>::assemble_system() {
     const FEValuesExtractors::Scalar theta3(5);
 
 
-    QGauss<dim> quadrature_formula(2);
+    QGauss<dim> quadrature_formula( quadrature );
     FEValues<dim, spacedim> fe_values(fe, quadrature_formula,
             update_values |
             update_gradients |
             update_quadrature_points |
             update_JxW_values);
 
-    QGauss < dim - 1 > face_quadrature_formula(1);
+    QGauss < dim - 1 > face_quadrature_formula( face_quadrature );
     FEFaceValues<dim> fe_face_values(fe, face_quadrature_formula,
             update_values |
             update_gradients |
@@ -121,7 +124,7 @@ void elastic_rod<dim, spacedim>::assemble_system() {
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
-    material_law.set_old_solution(solution_old);
+    material_law.set_old_solution( solution_old );
 
     typename DoFHandler<dim, spacedim>::active_cell_iterator
     cell = dof_handler.begin_active(),
@@ -390,19 +393,22 @@ void elastic_rod<dim, spacedim>::assemble_system() {
 
     MatrixTools::apply_boundary_values(
             boundary_values, system_matrix, solution, system_rhs);
+    
+    
+    return;
 }
 
 template <int dim, int spacedim>
-void elastic_rod<dim, spacedim>::solve() {
+void elastic_rod<dim, spacedim>::solve(bool first_call ) {
     SolverControl solver_control(10000, 1e-12);
     SolverCG<> cg(solver_control);
 
 
-    std::cout << "    writing matrix to file ... ";
-    std::ofstream of("sys_mat.txt");
-    system_matrix.print_formatted(of);
-    std::cout << " - done " << std::endl;
-    std::cout << "    Solving linear system... ";
+//    std::cout << " matrix to file: ";
+//    std::ofstream of("sys_mat.txt");
+//    system_matrix.print_formatted(of);
+//    std::cout << " - done - ";
+    std::cout << "Solve: ";
 
     try {
         // Direct
@@ -446,10 +452,12 @@ void elastic_rod<dim, spacedim>::solve() {
     // evaluation
     residual.push_back(system_rhs.l2_norm());
 
+    
     // update solution
-    solution_old.add(
-            get_newton_step_length(),
-            solution);
+    double step_length = get_newton_step_length( first_call );
+    std::cout <<"  alpha: "<<  step_length << " - "; 
+    alphas.push_back( step_length );
+    solution_old.add(step_length, solution);
 }
 
 /**
@@ -532,7 +540,7 @@ void elastic_rod<dim, spacedim>::output_results(const unsigned int cycle) const 
 }
 
 template <int dim, int spacedim>
-double elastic_rod<dim, spacedim>::get_newton_step_length() {
+double elastic_rod<dim, spacedim>::get_newton_step_length(bool first_call) {
     /* find optimal step length: trust region or back tracking line search */
 
     /*
@@ -546,30 +554,38 @@ double elastic_rod<dim, spacedim>::get_newton_step_length() {
      * 2/3 can be chosen different - look for Wolfe and Armijo-Goldstein condition
      * 
      */
-
+    double res_zero;
+    res_zero = residual.back();
+    
     double alpha = 1.0;
+    
+    if (first_call) { 
+        res_zero = residual.back();
+//        return alpha;
+    } else {
+        res_zero = res_check_all.back();
+    }
+    
     double res_check;
-    double res_zero = residual.back();
-
-    while (alpha > 0.01) {
-
+    while ( alpha > 0.1 ) {
+    
+        
         /* compute residual for alpha */
         res_check = compute_residual(alpha);
 
         /* check residual */
         if ( res_check < res_zero ) {
             /* good enough */
-            std::cout << "\n  -> alpha: " << alpha << " ";
-            alphas.push_back( alpha );
+            res_check_all.push_back( res_check );
             return alpha;
         }
 
         /* update alpha */
         alpha *= 2.0 / 3.0;
-    }
 
-    std::cout << "\n  -> alpha (min): " << alpha << " ";
-    alphas.push_back( alpha );
+    }
+    
+    res_check_all.push_back( res_check );
     return alpha;
 }
 
@@ -662,7 +678,6 @@ double elastic_rod<dim, spacedim>::compute_residual(double alpha) {
     const unsigned int n_face_q_points = face_quadrature_formula.size();
 
 
-    FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
     Vector<double> cell_rhs(dofs_per_cell);
 
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -835,27 +850,28 @@ template <int dim, int spacedim>
 void elastic_rod<dim, spacedim>::run() {
 
     bool first_call = true;
+    int refinement = 4;
     residual.resize(0);
     double old_residual = 0;
 
     /* geometry, mesh, triangulation, grid */
-    third_grid(1, 0.2, 4);
+    third_grid(1, 0.2, refinement);
 
     // newton itarationen
-    for (unsigned int newton_count = 0; newton_count < 100; ++newton_count) {
-        std::cout << "  start newton step " << newton_count << std::endl;
+    for (unsigned int newton_count = 0; newton_count < 250; ++newton_count) {
+        std::cout << "newton: " << newton_count;
 
         /* initialize linear system */
         setup_system(first_call);
 
-        std::cout << "    Total number of degrees of freedom: "
-                << dof_handler.n_dofs() << std::endl;
+        std::cout << " - DOFS: "
+                << dof_handler.n_dofs() << " - ";
 
         /* assemble linear system */
         assemble_system();
 
         /* solve linear system */
-        solve();
+        solve( first_call );
 
         /* write solution to file */
         output_results(newton_count);
@@ -865,14 +881,19 @@ void elastic_rod<dim, spacedim>::run() {
 //            std::cout << " ---  enough ---" << '\n' << '\n';
 //            break;
 //        }
-        double my_error = 1.0e-10;
-        if ( residual.back() <  && !first_call ) {
+        const double my_error = 1.0e-7;
+        if ( !first_call && residual.back() < my_error ) {
             std::cout << "\n\n >>> good enough err:  " << residual.back() <<  " <<< \n\n";
+            break;
+        }
+        const double my_improvement = abs(residual[residual.size()-2] - residual.back());
+        if ( !first_call && my_improvement < my_error  ) {
+            std::cout << "\n\n >>> no improvement any more:  " << residual.back() <<  " <<< \n\n";
             break;
         }
         
         if (!first_call && residual.back() > old_residual) {
-            std::cerr << " --- !!! residual grows !!! --- " << '\n' << '\n';
+            std::cout << " -!- residual grows -!- ";
         }
 
         /* update old_residual */
@@ -892,7 +913,8 @@ void elastic_rod<dim, spacedim>::run() {
     {
         std::cout 
                 << "\t" << "step-" << i << " ------- " << '\n' 
-                << "\t\t" << "residual: " << residual[i] << '\n' 
+                << "\t\t" << "residual (x+dx): " << res_check_all[i] << '\n' 
+//                << "\t\t" << "residual: " << residual[i] << '\n' 
                 << "\t\t" << "alpha: " << alphas[i] << std::endl;
     }
     std::cout << std::endl << " ---------- " << std::endl;

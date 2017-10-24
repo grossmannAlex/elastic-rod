@@ -69,8 +69,8 @@ private:
             const double &radius,
             const int &n_of_ref);
     void setup_system(const bool first_step);
-    void assemble_system(  );
-    void solve();
+    void assemble_system( );
+    void solve( bool first_step );
     void refine_grid();
     void output_results(const unsigned int cycle) const;
 
@@ -86,7 +86,7 @@ private:
 
 
     /* newton iterations methods */
-    double get_newton_step_length();
+    double get_newton_step_length( bool first_call );
     double compute_residual (double alpha);
     
     
@@ -106,6 +106,7 @@ private:
     Vector<double> system_rhs;
     
     std::vector<double> residual;
+    std::vector<double> res_check_all;
     std::vector<double> alphas;
 
 };
