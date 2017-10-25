@@ -38,6 +38,7 @@
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_dgq.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/lac/sparse_direct.h>
 #include <deal.II/base/timer.h>
@@ -109,6 +110,11 @@ private:
     std::vector<double> res_check_all;
     std::vector<double> alphas;
 
+    const int quadrature;
+    const int face_quadrature;
+    const int max_newton_iter;
+    const int global_refinement;
+    const bool global_alpha_off;
 };
 
 

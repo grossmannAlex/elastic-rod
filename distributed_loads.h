@@ -42,8 +42,14 @@ public:
     bool ask_for_boundary(
         const unsigned int i,
         const unsigned int j);
-private:
 
+    bool decrease_load();
+    bool increase_load();
+    
+private:
+    
+    double load_factor;
+    
 };
 
 #endif	/* DISTRIBUTED_LOADS_H */

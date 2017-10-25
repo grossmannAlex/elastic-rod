@@ -14,9 +14,14 @@ template <int dim, int spacedim>
 elastic_rod<dim, spacedim>::elastic_rod()
 :
 dof_handler(triangulation),
-fe(FE_Q<dim, spacedim>(2), 3,
-FE_Q<dim, spacedim>(1), 3
-) {
+fe(     FE_Q<dim, spacedim>(2), 3,
+        FE_Q<dim, spacedim>(1), 3) ,
+        quadrature(2),
+        face_quadrature(1),
+        max_newton_iter(500),
+        global_refinement(4),
+        global_alpha_off(false)
+{
 }
 
 template <int dim, int spacedim>
@@ -82,9 +87,6 @@ void elastic_rod<dim, spacedim>::setup_system(const bool first_step) {
 template <int dim, int spacedim>
 void elastic_rod<dim, spacedim>::assemble_system() {
 
-    
-    const int quadrature = 2;
-    const int face_quadrature = 1;
     
     // 	const FEValuesExtractors::Vector centerline (0);
     // 	const FEValuesExtractors::Vector rotations (spacedim);
@@ -554,35 +556,45 @@ double elastic_rod<dim, spacedim>::get_newton_step_length(bool first_call) {
      * 2/3 can be chosen different - look for Wolfe and Armijo-Goldstein condition
      * 
      */
-    double res_zero;
-    res_zero = residual.back();
     
     double alpha = 1.0;
     
-    if (first_call) { 
-        res_zero = residual.back();
-//        return alpha;
-    } else {
-        res_zero = res_check_all.back();
+    if ( global_alpha_off ) {
+        res_check_all.push_back( compute_residual( alpha ) );
+        return alpha;
     }
+    
+//    if ( first_call ) {
+//        res_check_all.push_back( compute_residual( alpha ) );
+//        return alpha;
+//    }
+    
+    double res_zero;
+    res_zero = residual.back();
+    
+//    if (first_call) { 
+//        res_zero = residual.back();
+////        return alpha;
+//    } else {
+//        res_zero = res_check_all.back();
+//    }
     
     double res_check;
     while ( alpha > 0.1 ) {
     
         
         /* compute residual for alpha */
-        res_check = compute_residual(alpha);
+        res_check = compute_residual( alpha );
 
         /* check residual */
-        if ( res_check < res_zero ) {
+        if ( res_check * 1.0 < res_zero ) {
             /* good enough */
             res_check_all.push_back( res_check );
             return alpha;
         }
 
         /* update alpha */
-        alpha *= 2.0 / 3.0;
-
+        alpha *= 2.0 / 3.0;        
     }
     
     res_check_all.push_back( res_check );
@@ -656,14 +668,14 @@ double elastic_rod<dim, spacedim>::compute_residual(double alpha) {
     const FEValuesExtractors::Scalar theta3(5);
 
 
-    QGauss<dim> quadrature_formula(2);
+    QGauss<dim> quadrature_formula( quadrature );
     FEValues<dim, spacedim> fe_values(fe, quadrature_formula,
             update_values |
             update_gradients |
             update_quadrature_points |
             update_JxW_values);
 
-    QGauss < dim - 1 > face_quadrature_formula(1);
+    QGauss < dim - 1 > face_quadrature_formula( face_quadrature );
     FEFaceValues<dim> fe_face_values(fe, face_quadrature_formula,
             update_values |
             update_gradients |
@@ -850,15 +862,18 @@ template <int dim, int spacedim>
 void elastic_rod<dim, spacedim>::run() {
 
     bool first_call = true;
-    int refinement = 4;
     residual.resize(0);
     double old_residual = 0;
 
     /* geometry, mesh, triangulation, grid */
-    third_grid(1, 0.2, refinement);
-
+    third_grid(1, 0.2, global_refinement);
+    
+    /* ... */
+    const double my_error = 1.0e-9;
+    
+    
     // newton itarationen
-    for (unsigned int newton_count = 0; newton_count < 250; ++newton_count) {
+    for (unsigned int newton_count = 0; newton_count < max_newton_iter ; ++newton_count) {
         std::cout << "newton: " << newton_count;
 
         /* initialize linear system */
@@ -881,16 +896,28 @@ void elastic_rod<dim, spacedim>::run() {
 //            std::cout << " ---  enough ---" << '\n' << '\n';
 //            break;
 //        }
-        const double my_error = 1.0e-7;
+        
+        if ( !first_call && residual.back() < 100.0 )
+            loads.increase_load();
+        
         if ( !first_call && residual.back() < my_error ) {
-            std::cout << "\n\n >>> good enough err:  " << residual.back() <<  " <<< \n\n";
-            break;
+            if ( loads.increase_load() ) {}
+            else {
+                std::cout       << "\n\n >>> good enough err:  " 
+                                << residual.back() <<  " <<< \n\n";
+                break;
+            }
         }
+        
         const double my_improvement = abs(residual[residual.size()-2] - residual.back());
         if ( !first_call && my_improvement < my_error  ) {
-            std::cout << "\n\n >>> no improvement any more:  " << residual.back() <<  " <<< \n\n";
-            break;
-        }
+                if ( loads.increase_load() ) {}
+                else {
+                std::cout       << "\n\n >>> no improvement any more:  "
+                                << residual.back() <<  " <<< \n\n";
+                break;
+                }
+         }
         
         if (!first_call && residual.back() > old_residual) {
             std::cout << " -!- residual grows -!- ";
