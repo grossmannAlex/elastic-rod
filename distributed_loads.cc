@@ -7,7 +7,9 @@
 
 #include "distributed_loads.h"
 
-distributed_loads::distributed_loads() {
+distributed_loads::distributed_loads():
+        load_factor(0.01)
+{
 }
 
 //distributed_loads::distributed_loads(const distributed_loads& orig) {
@@ -31,7 +33,7 @@ Tensor < 1, 3 > distributed_loads::f_n_hat(
     Rn_pre[1] = 0.0;
     Rn_pre[2] = 0.0;
     Rn_pre = R * Rn_pre;
-    return (result + Rn_pre);
+    return (result + Rn_pre)*load_factor;
 }
 
 Tensor < 1, 3 > distributed_loads::f_m_hat(
@@ -48,7 +50,7 @@ Tensor < 1, 3 > distributed_loads::f_m_hat(
     Rm_pre[1] = 0.0;
     Rm_pre[2] = 0.0;
     Rm_pre = R * Rm_pre;
-    return (result + Rm_pre);
+    return (result + Rm_pre)*load_factor;
 }
 
 Tensor < 1, 3 > distributed_loads::f_n_pre(
@@ -59,17 +61,18 @@ Tensor < 1, 3 > distributed_loads::f_n_pre(
     n_pre[2] = 0.0;
 
     Tensor < 1, 3 > Rn_pre;
-    Rn_pre[0] = 1000000.0;
+    Rn_pre[0] = 100.0;
     Rn_pre[1] = 0.0;
     Rn_pre[2] = 0.0;
     Rn_pre = R * Rn_pre;
-    return (n_pre + Rn_pre);
+    return (n_pre + Rn_pre)*load_factor;
 }
 
 Tensor < 1, 3 > distributed_loads::f_m_pre(
         const Tensor < 2, 3 > R) {
     Tensor < 1, 3 > m_pre;
     m_pre[0] = 0.0;
+//    m_pre[1] = 1.25*M_PI*100;
     m_pre[1] = 0.0;
     m_pre[2] = 0.0;
 
@@ -78,7 +81,7 @@ Tensor < 1, 3 > distributed_loads::f_m_pre(
     Rm_pre[1] = 0.0;
     Rm_pre[2] = 0.0;
     Rm_pre = R * Rm_pre;
-    return (m_pre + Rm_pre);
+    return (m_pre + Rm_pre)*load_factor;
 }
 
 
@@ -157,3 +160,28 @@ double distributed_loads::get_dirichlet_right( int entry_num )
     return most_right_dirichlet[entry_num];
 }
 
+
+bool distributed_loads::decrease_load()
+{
+    Assert( load_factor > 0 , ExcMessage( " no " ) ); 
+    load_factor *= 0.5;
+    
+    std::cout << "\ndecrease load\n";
+    return false;
+}
+
+bool distributed_loads::increase_load()
+{
+    Assert( load_factor > 0 , ExcMessage( " no " ) ); 
+    
+    load_factor *= 1.2;
+    
+    if ( load_factor > 1.0)
+    {
+        load_factor = 1.0;
+        std::cout << "\nmax load\n";
+        return false;
+    }
+    std::cout << "\nincrease load\n";
+    return true;
+}
