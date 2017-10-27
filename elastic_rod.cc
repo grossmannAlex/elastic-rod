@@ -14,13 +14,13 @@ template <int dim, int spacedim>
 elastic_rod<dim, spacedim>::elastic_rod()
 :
 dof_handler(triangulation),
-fe(     FE_Q<dim, spacedim>(2), 3,
+fe(     FE_Q<dim, spacedim>(3), 3,
         FE_Q<dim, spacedim>(1), 3) ,
-        quadrature(2),
+        quadrature(3),
         face_quadrature(1),
-        max_newton_iter(500),
+        max_newton_iter(200),
         global_refinement(4),
-        global_alpha_off(false)
+        global_alpha_off(true)
 {
 }
 
@@ -60,12 +60,12 @@ void elastic_rod<dim, spacedim>::third_grid(
 }
 
 template <int dim, int spacedim>
-void elastic_rod<dim, spacedim>::setup_system(const bool first_step) {
+void elastic_rod<dim, spacedim>::setup_system() {
 
-    if (first_step) {
-        dof_handler.distribute_dofs(fe);
-        solution_old.reinit(dof_handler.n_dofs());
-    }
+//    if (first_step) {
+//        dof_handler.distribute_dofs(fe);
+//        solution_old.reinit(dof_handler.n_dofs());
+//    }
 
     hanging_node_constraints.clear();
     DoFTools::make_hanging_node_constraints(
@@ -401,7 +401,7 @@ void elastic_rod<dim, spacedim>::assemble_system() {
 }
 
 template <int dim, int spacedim>
-void elastic_rod<dim, spacedim>::solve(bool first_call ) {
+void elastic_rod<dim, spacedim>::solve() {
     SolverControl solver_control(10000, 1e-12);
     SolverCG<> cg(solver_control);
 
@@ -420,8 +420,7 @@ void elastic_rod<dim, spacedim>::solve(bool first_call ) {
         A_direct.initialize(system_matrix);
         A_direct.vmult(solution, system_rhs);
         timer.stop();
-        std::cout << "direct - done (" << timer() << "s)"
-                << std::endl;
+        std::cout << "direct - done (" << timer() << "s)" << " - ";
     } catch (...) {
         std::cerr
                 << std::endl << std::endl
@@ -450,13 +449,13 @@ void elastic_rod<dim, spacedim>::solve(bool first_call ) {
 
     hanging_node_constraints.distribute(solution);
 
+}
 
-    // evaluation
-    residual.push_back(system_rhs.l2_norm());
-
+template <int dim, int spacedim>
+void elastic_rod<dim, spacedim>::update_solution() {
     
     // update solution
-    double step_length = get_newton_step_length( first_call );
+    double step_length = get_newton_step_length();
     std::cout <<"  alpha: "<<  step_length << " - "; 
     alphas.push_back( step_length );
     solution_old.add(step_length, solution);
@@ -542,7 +541,7 @@ void elastic_rod<dim, spacedim>::output_results(const unsigned int cycle) const 
 }
 
 template <int dim, int spacedim>
-double elastic_rod<dim, spacedim>::get_newton_step_length(bool first_call) {
+double elastic_rod<dim, spacedim>::get_newton_step_length() {
     /* find optimal step length: trust region or back tracking line search */
 
     /*
@@ -861,77 +860,152 @@ double elastic_rod<dim, spacedim>::compute_residual(double alpha) {
 template <int dim, int spacedim>
 void elastic_rod<dim, spacedim>::run() {
 
-    bool first_call = true;
+    bool   convergence     = true;
+    double my_error        = 1.0e-2;
+    double final_error     = 1.0e-5;
+    int    counter         = 0;
+    
+    Vector<double> safe_solution;
+    double safe_load = 0.0;
+    
     residual.resize(0);
-    double old_residual = 0;
-
+    loads.set_initial_num_steps( 2 );
+    loads.set_alpha_zero( 0.0 );
+    loads.reset_beta();
+    
     /* geometry, mesh, triangulation, grid */
     third_grid(1, 0.2, global_refinement);
+    dof_handler.distribute_dofs(fe);
+    solution_old.reinit(dof_handler.n_dofs());
+    safe_solution.reinit( dof_handler.n_dofs() );
     
-    /* ... */
-    const double my_error = 1.0e-9;
-    
-    
-    // newton itarationen
-    for (unsigned int newton_count = 0; newton_count < max_newton_iter ; ++newton_count) {
-        std::cout << "newton: " << newton_count;
-
-        /* initialize linear system */
-        setup_system(first_call);
-
-        std::cout << " - DOFS: "
-                << dof_handler.n_dofs() << " - ";
-
-        /* assemble linear system */
-        assemble_system();
-
-        /* solve linear system */
-        solve( first_call );
-
-        /* write solution to file */
-        output_results(newton_count);
-
-        /* check newton accuracy and progress*/
-//        if (std::abs(old_residual / residual.back() - 1) < 0.01) {
-//            std::cout << " ---  enough ---" << '\n' << '\n';
-//            break;
-//        }
+    while ( convergence && counter < max_newton_iter )
+    {
+        /* increase load starting from zero */
+        loads.increase_alpha();
         
-        if ( !first_call && residual.back() < 100.0 )
-            loads.increase_load();
-        
-        if ( !first_call && residual.back() < my_error ) {
-            if ( loads.increase_load() ) {}
-            else {
-                std::cout       << "\n\n >>> good enough err:  " 
-                                << residual.back() <<  " <<< \n\n";
+        /* 20 iterations of newton: starting from solution_x */
+        for (unsigned int newton_count = 0; newton_count < 10; ++newton_count) {
+            std::cout << "\nnewton: " << newton_count <<"  ";
+            setup_system();                                           //  initialize linear system 
+            assemble_system();                                                  // assemble linear system 
+            solve();                                                            // solve linear system 
+            residual.push_back(system_rhs.l2_norm());                           // compute norm of residual 
+            update_solution();                                                  // update solution 
+            output_results( newton_count );                                           // write solution output 
+            
+            /* for maximum load the error tolerance is chosen smaller */
+            if (residual.back() < my_error && loads.get_alpha() == 1 )
+                my_error = final_error;
+
+            
+            /* if state is safe load will be increased */
+            if (residual.back() < my_error){
+                safe_solution   = solution_old;
+                safe_load       = loads.get_alpha();
+                loads.increase_step();
                 break;
             }
         }
         
-        const double my_improvement = abs(residual[residual.size()-2] - residual.back());
-        if ( !first_call && my_improvement < my_error  ) {
-                if ( loads.increase_load() ) {}
-                else {
-                std::cout       << "\n\n >>> no improvement any more:  "
-                                << residual.back() <<  " <<< \n\n";
-                break;
-                }
-         }
+        /* if no convergence: decrease */
+        if ( residual.back() > my_error ){
+            solution_old = safe_solution;
+            loads.set_alpha_zero( safe_load );
+            loads.decrease_step();
+        } 
         
-        if (!first_call && residual.back() > old_residual) {
-            std::cout << " -!- residual grows -!- ";
+        
+        /* if load max: break */
+        if ( loads.get_alpha() >= 1.0 && (residual.back() < my_error) ){
+            std::cout << "\n\n  - reached maximum load - \n" ;
+            break;
         }
-
-        /* update old_residual */
-        old_residual = residual.back();
-        first_call = false;
+        
+        counter++;
     }
 
-    std::cout
-            << std::endl << " ---------- " << std::endl
-            << "  num of newton iterations: " << residual.size() << std::endl;
+    
+    
+//    // newton itarationen
+//    for (unsigned int newton_count = 0; newton_count < max_newton_iter ; ++newton_count) {
+//        
+//        std::cout << "newton: " << newton_count;
+//        
+//        /* initialize linear system */
+//        setup_system(first_call);
+//
+//        std::cout << " - DOFS: "
+//                << dof_handler.n_dofs() << " - ";
+//
+//        /* assemble linear system */
+//        assemble_system();
+//
+//        /* solve linear system */
+//        solve();
+//
+//        /* compute norm of residual */
+//        residual.push_back( system_rhs.l2_norm() );
+//        
+//        /* update solution */
+//        update_solution();
+//        
+//        /* write solution output */
+//        output_results(newton_count);
+//
+//        /* check newton accuracy and progress*/
+////        if (std::abs(old_residual / residual.back() - 1) < 0.01) {
+////            std::cout << " ---  enough ---" << '\n' << '\n';
+////            break;
+////        }
+//        
+////        if (!first_call && residual.back() > old_residual) {
+////            std::cout << " -!- residual grows -!- ";
+////            if ( loads.get_load_factor() == 1 )
+////                break;
+////        }
+//        
+//        if ( alphas.back() == 1 )
+//            alpha_counter++;
+//        else
+//            alpha_counter = 0;
+//        
+//        if ( alpha_counter > 5 ){ 
+//                loads.increase_load();
+//                alpha_counter = 0;
+//        }
+//        
+//        if ( !first_call && residual.back() < 1.0 )
+//            loads.increase_load();
+//        
+//        if ( !first_call && residual.back() < my_error ) {
+//            if ( loads.increase_load() ) {}
+//            else {
+//                std::cout       << "\n\n >>> good enough err:  " 
+//                                << residual.back() <<  " <<< \n\n";
+//                break;
+//            }
+//        }
+//        
+//        const double my_improvement = abs(residual[residual.size()-2] - residual.back());
+//        if ( !first_call && my_improvement < my_error  ) {
+//                if ( loads.increase_load() ) {}
+//                else {
+//                std::cout       << "\n\n >>> no improvement any more:  "
+//                                << residual.back() <<  " <<< \n\n";
+//                break;
+//                }
+//         }
+//        
+//        
+//        
+//        /* update old_residual */
+//        old_residual = residual.back();
+//        first_call = false;
+//        
+//    }
 
+    
 //    std::vector<double>::iterator item = residual.begin();
 //    for (; item != residual.end(); ++item) {
 //        std::cout << "     " << *item << std::endl;
@@ -945,5 +1019,15 @@ void elastic_rod<dim, spacedim>::run() {
                 << "\t\t" << "alpha: " << alphas[i] << std::endl;
     }
     std::cout << std::endl << " ---------- " << std::endl;
+    std::cout << "  load factor: " << loads.get_alpha() << std::endl;
+    std::cout << "  DOFS: " << dof_handler.n_dofs() << std::endl;
+    std::cout << "  residual " <<  residual.back() << std::endl;
+    std::cout << "  res check " <<  res_check_all.back() << std::endl;
+    
+    if (my_error > residual.back() && loads.get_alpha() == 1)
+        std::cout << "\n  :) :) :) good " << std::endl;
+    else
+        std::cout << "\n  -!-!-!- no good -!-!-!- " << std::endl;
+        
 
 }

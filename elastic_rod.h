@@ -69,9 +69,10 @@ private:
             const double &len,
             const double &radius,
             const int &n_of_ref);
-    void setup_system(const bool first_step);
+    void setup_system();
     void assemble_system( );
-    void solve( bool first_step );
+    void solve();
+    void update_solution();
     void refine_grid();
     void output_results(const unsigned int cycle) const;
 
@@ -87,7 +88,7 @@ private:
 
 
     /* newton iterations methods */
-    double get_newton_step_length( bool first_call );
+    double get_newton_step_length();
     double compute_residual (double alpha);
     
     

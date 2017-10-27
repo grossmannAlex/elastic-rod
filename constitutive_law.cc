@@ -34,19 +34,22 @@ void constitutive_law::set_coefficients() {
     
     // assuming 1 meter length of the rod
     
-    double r = 0.025;                           // m
-    double E = 210000.0 * 1000.0 * 1000.0;      // N/m^2
-    double G = 70000 * 1000.0 * 1000.0;         // N/m^2
-    double A = pow(r,2) * M_PI;                 // d^2 / 4 * pi
-    double I = pow(r,4) * M_PI/4;               // r^4 / 4 * pi 
-    double J = 2 * I;
-    double GAx = G * A;
-    double GAy = G * A;
-    double EA = E * A;
-    double EIx = E * I;
-    double EIy = E * I;
-    double GJ = G * J;
-    double EIxy = 0.0;
+    const double r = 0.025;                           // m
+    const double E = 210000.0 * 1000.0;               // kN/m^2
+    const double G = 70000 * 1000.0;                  // kN/m^2
+    const double A = pow(r,2) * M_PI;                 // d^2 / 4 * pi
+    const double I = pow(r,4) * M_PI/4;               // r^4 / 4 * pi 
+    const double J = 2 * I;
+    const double GAx = G * A;
+    const double GAy = G * A;
+    const double EA = E * A;
+    const double EIx = E * I;
+    const double EIy = E * I;
+//    double EIx = 2.0;
+//    double EIy = 2.0;
+    const double GJ = G * J;
+    const double EIxy = 0.0;
+    
 
     C11[0][0] = GAx;
     C11[0][1] = 0;
